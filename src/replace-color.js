@@ -6,12 +6,12 @@ const ReplaceColorError = require('./utils/replace-color-error')
 const validateColors = require('./utils/validate-colors')
 
 module.exports = ({
-  image,
-  colors,
-  formula = 'E00',
-  deltaE = 2.3,
-  respectCenterColor = false,
-} = {}, callback) => {
+                    image,
+                    colors,
+                    formula = 'E00',
+                    deltaE = 2.3,
+                    respectCenterColor = false,
+                  } = {}, callback) => {
   if (callback) {
     if (typeof callback !== 'function') {
       throw new ReplaceColorError('PARAMETER_INVALID', 'callback')
@@ -45,12 +45,13 @@ module.exports = ({
       .then((jimpObject) => {
         const targetLABColor = convertColor(colors.type, 'lab', colors.targetColor)
         const replaceRGBColor = convertColor(colors.type, 'rgb', colors.replaceColor)
+        const replaceLABColor = convertColor(colors.type, 'lab', colors.replaceColor)
 
         let matrix = [];
         jimpObject.scan(0, 0, jimpObject.bitmap.width, jimpObject.bitmap.height, (x, y, idx) => {
 
           if(!respectCenterColor){
-            if(canReplacePixel(jimpObject, idx, targetLABColor)){
+            if(canReplacePixel(jimpObject, idx, targetLABColor, replaceLABColor)){
               jimpObject = replacePixel(jimpObject, idx, replaceRGBColor);
             }
           }
@@ -62,97 +63,126 @@ module.exports = ({
         })
 
         if(respectCenterColor){
-          jimpObject = listInOrder(jimpObject, matrix, targetLABColor, replaceRGBColor);
+          jimpObject = listInOrder(jimpObject, matrix, targetLABColor, replaceRGBColor, replaceLABColor);
         }
 
         callback(null, jimpObject)
       })
       .catch(callback)
 
-      function listInOrder(jimpObject, matrix, targetLABColor, replaceRGBColor) {
-        jimpObject = listFromLeft(jimpObject, matrix, targetLABColor, replaceRGBColor);
-        jimpObject = listFromRight(jimpObject, matrix, targetLABColor, replaceRGBColor);
-        jimpObject = listFromTop(jimpObject, matrix, targetLABColor, replaceRGBColor);
-        jimpObject = listFromBottom(jimpObject, matrix, targetLABColor, replaceRGBColor);
-        return jimpObject;
-      }
-      function listFromLeft(jimpObject, matrix, targetLABColor, replaceRGBColor) {
-        for(let y = 0; y < jimpObject.bitmap.height; y++)
-        {
-          for(let x = 0; x < jimpObject.bitmap.width; x++)
-          {
-            if(canReplacePixel(jimpObject, matrix[x][y], targetLABColor)){
-              jimpObject = replacePixel(jimpObject, matrix[x][y], replaceRGBColor);
-            }
-            else{
-              break;
-            }
-          }
-        }
-        return jimpObject;
-      }
-      function listFromRight(jimpObject, matrix, targetLABColor, replaceRGBColor) {
-        for(let y = 0; y < jimpObject.bitmap.height; y++)
-        {
-          for(let x = jimpObject.bitmap.width - 1; x >= 0; x--)
-          {
-            if(canReplacePixel(jimpObject, matrix[x][y], targetLABColor)){
-              jimpObject = replacePixel(jimpObject, matrix[x][y], replaceRGBColor);
-            }
-            else{
-              break;
-            }
-          }
-        }
-        return jimpObject;
-      }
-      function listFromTop(jimpObject, matrix, targetLABColor, replaceRGBColor) {
+    function listInOrder(jimpObject, matrix, targetLABColor, replaceRGBColor, replaceLABColor) {
+      jimpObject = listFromLeft(jimpObject, matrix, targetLABColor, replaceRGBColor, replaceLABColor);
+      jimpObject = listFromRight(jimpObject, matrix, targetLABColor, replaceRGBColor, replaceLABColor);
+      jimpObject = listFromTop(jimpObject, matrix, targetLABColor, replaceRGBColor, replaceLABColor);
+      jimpObject = listFromBottom(jimpObject, matrix, targetLABColor, replaceRGBColor, replaceLABColor);
+      return jimpObject;
+    }
+    function listFromLeft(jimpObject, matrix, targetLABColor, replaceRGBColor, replaceLABColor) {
+      let first = true;
+      for(let y = 0; y < jimpObject.bitmap.height; y++)
+      {
         for(let x = 0; x < jimpObject.bitmap.width; x++)
         {
-          for(let y = 0; y < jimpObject.bitmap.height; y++)
-          {
-            if(canReplacePixel(jimpObject, matrix[x][y], targetLABColor)){
-              jimpObject = replacePixel(jimpObject, matrix[x][y], replaceRGBColor);
-            }
-            else{
-              break;
-            }
+          const start = startReplace(jimpObject, matrix[x][y], targetLABColor, replaceLABColor, replaceRGBColor);
+          if(start){
+            jimpObject = start;
+          }
+          else{
+            break;
           }
         }
-        return jimpObject;
       }
-      function listFromBottom(jimpObject, matrix, targetLABColor, replaceRGBColor) {
-        for(let x = 0; x < jimpObject.bitmap.width; x++)
+      return jimpObject;
+    }
+    function listFromRight(jimpObject, matrix, targetLABColor, replaceRGBColor, replaceLABColor) {
+      for(let y = 0; y < jimpObject.bitmap.height; y++)
+      {
+        for(let x = jimpObject.bitmap.width - 1; x >= 0; x--)
         {
-          for(let y = jimpObject.bitmap.height - 1; y >= 0; y--)
-          {
-            if(canReplacePixel(jimpObject, matrix[x][y], targetLABColor)){
-              jimpObject = replacePixel(jimpObject, matrix[x][y], replaceRGBColor);
-            }
-            else{
-              break;
-            }
+          const start = startReplace(jimpObject, matrix[x][y], targetLABColor, replaceLABColor, replaceRGBColor);
+          if(start){
+            jimpObject = start;
+          }
+          else{
+            break;
           }
         }
+      }
+      return jimpObject;
+    }
+    function listFromTop(jimpObject, matrix, targetLABColor, replaceRGBColor, replaceLABColor) {
+      let first = true;
+      for(let x = 0; x < jimpObject.bitmap.width; x++)
+      {
+        for(let y = 0; y < jimpObject.bitmap.height; y++)
+        {
+          const start = startReplace(jimpObject, matrix[x][y], targetLABColor, replaceLABColor, replaceRGBColor);
+          if(start){
+            jimpObject = start;
+          }
+          else{
+            break;
+          }
+        }
+      }
+      return jimpObject;
+    }
+    function listFromBottom(jimpObject, matrix, targetLABColor, replaceRGBColor, replaceLABColor) {
+      for(let x = 0; x < jimpObject.bitmap.width; x++)
+      {
+        for(let y = jimpObject.bitmap.height - 1; y >= 0; y--)
+        {
+          const start = startReplace(jimpObject, matrix[x][y], targetLABColor, replaceLABColor, replaceRGBColor);
+          if(start){
+            jimpObject = start;
+          }
+          else{
+            break;
+          }
+        }
+      }
+      return jimpObject;
+    }
+
+    function startReplace(jimpObject, idx, targetLABColor, replaceLABColor, replaceRGBColor) {
+      const canReplace = canReplacePixel(jimpObject, idx, targetLABColor, replaceLABColor);
+      if(canReplace){
+        if(canReplace === 1)
+          jimpObject = replacePixel(jimpObject, idx, replaceRGBColor);
         return jimpObject;
       }
+      return false;
+    }
 
-      function canReplacePixel(jimpObject, idx, targetLABColor) {
-        const currentLABColor = convertColor('rgb', 'lab', [
-          jimpObject.bitmap.data[idx],
-          jimpObject.bitmap.data[idx + 1],
-          jimpObject.bitmap.data[idx + 2]
-        ]);
-        return getDelta(currentLABColor, targetLABColor, formula) <= deltaE;
-      }
+    function canReplacePixel(jimpObject, idx, targetLABColor, replaceLABColor) {
+      const currentLABColor = convertColor('rgb', 'lab', [
+        jimpObject.bitmap.data[idx],
+        jimpObject.bitmap.data[idx + 1],
+        jimpObject.bitmap.data[idx + 2],
+        jimpObject.bitmap.data[idx + 3]
+      ]);
 
-      function replacePixel(jimpObject, idx, replaceRGBColor) {
-        jimpObject.bitmap.data[idx] = replaceRGBColor[0]
-        jimpObject.bitmap.data[idx + 1] = replaceRGBColor[1]
-        jimpObject.bitmap.data[idx + 2] = replaceRGBColor[2]
-        if (replaceRGBColor[3] !== null) jimpObject.bitmap.data[idx + 3] = replaceRGBColor[3]
-        return jimpObject;
-      }
+      if(equalColor(currentLABColor, replaceLABColor))
+        return 2;
+      if(getDelta(currentLABColor, targetLABColor, formula) <= deltaE)
+        return 1;
+      return 0;
+    }
+
+    function replacePixel(jimpObject, idx, replaceRGBColor) {
+      jimpObject.bitmap.data[idx] = replaceRGBColor[0]
+      jimpObject.bitmap.data[idx + 1] = replaceRGBColor[1]
+      jimpObject.bitmap.data[idx + 2] = replaceRGBColor[2]
+      if (replaceRGBColor[3] !== null) jimpObject.bitmap.data[idx + 3] = replaceRGBColor[3]
+      return jimpObject;
+    }
+
+    function equalColor(currentLABColor, replaceLABColor) {
+      return currentLABColor[0] === replaceLABColor[0] &&
+        currentLABColor[1] === replaceLABColor[1] &&
+        currentLABColor[2] === replaceLABColor[2] &&
+        currentLABColor[3] === replaceLABColor[3];
+    }
 
   })
 }
